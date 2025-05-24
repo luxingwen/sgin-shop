@@ -36,8 +36,8 @@ type Payment struct {
 
 	// 付款时间
 	PaidAt    string `json:"paid_at"`
-	CreatedAt string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	CreatedAt string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 }
 
 type ReqPaymentQueryParam struct {

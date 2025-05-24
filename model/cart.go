@@ -10,8 +10,8 @@ type Cart struct {
 	ProductItemUuid string `json:"product_item_uuid" gorm:"type:varchar(36);index"`
 	// 数量
 	Quantity  int    `json:"quantity"`
-	CreatedAt string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	CreatedAt string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 }
 
 type CartProductItemRes struct {

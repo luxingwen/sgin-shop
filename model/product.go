@@ -34,7 +34,7 @@ type Product struct {
 	AliasName string `json:"alias_name" gorm:"type:varchar(100)"` // 产品别名
 
 	// 产品描述
-	Description string `json:"description" gorm:"type:varchar(255)"`
+	Description string `json:"description" gorm:"type:longtext"`
 
 	ProductType string `json:"product_type" gorm:"type:varchar(100)"` // 单个产品、变体产品、组合产品
 
@@ -56,8 +56,8 @@ type Product struct {
 
 	CurrencyCode string `json:"currency_code" gorm:"type:varchar(10)"` // 货币代码
 
-	CreatedAt string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	CreatedAt string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 
 }
 
@@ -81,7 +81,7 @@ type ProductShow struct {
 	AliasName string `json:"alias_name" gorm:"type:varchar(100)"` // 产品别名
 
 	// 产品描述
-	Description string `json:"description" gorm:"type:varchar(255)"`
+	Description string `json:"description" gorm:"type:longtext"`
 	// 产品价格
 	Price float64 `json:"price" gorm:"type:decimal(10,2)"`
 	// 产品折扣
@@ -125,9 +125,9 @@ type ProductVariants struct {
 	// 产品变体名称
 	Name string `json:"name" gorm:"type:varchar(100)"`
 	// 产品变体描述
-	Description string `json:"description" gorm:"type:varchar(255)"`
-	CreatedAt   string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt   string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	Description string `json:"description" gorm:"type:longtext"`
+	CreatedAt   string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt   string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 }
 
 type ProductVariantsRes struct {
@@ -146,9 +146,9 @@ type ProductVariantsOption struct {
 	// 单位 例如: 个、件、套、箱
 	Unit string `json:"unit" gorm:"type:varchar(100)"`
 	// 产品变体Option描述
-	Description string `json:"description" gorm:"type:varchar(255)"`
-	CreatedAt   string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt   string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	Description string `json:"description" gorm:"type:longtext"`
+	CreatedAt   string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt   string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 }
 
 // 产品变体Option值
@@ -161,9 +161,9 @@ type ProductVariantsOptionValue struct {
 	// 单位 例如: 个、件、套、箱
 	Unit string `json:"unit" gorm:"type:varchar(100)"`
 	// 产品变体Option值描述
-	Description string `json:"description" gorm:"type:varchar(255)"`
-	CreatedAt   string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt   string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	Description string `json:"description" gorm:"type:longtext"`
+	CreatedAt   string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt   string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 }
 
 // 产品具体信息
@@ -192,7 +192,7 @@ type ProductItem struct {
 	// 产品视频
 	Videos string `json:"videos" gorm:"comment:产品视频"`
 	// 产品描述
-	Description string `json:"description" gorm:"type:varchar(255)"`
+	Description string `json:"description" gorm:"type:longtext"`
 	// 产品价格
 	Price float64 `json:"price" gorm:"type:decimal(10,2)"`
 	// 产品折扣
@@ -202,8 +202,8 @@ type ProductItem struct {
 	// 产品库存
 	Stock int64 `json:"stock" gorm:"type:int"`
 
-	CreatedAt string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	CreatedAt string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 }
 
 type ProductItemByPrice []*ProductItem

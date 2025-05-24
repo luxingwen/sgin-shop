@@ -11,3 +11,4 @@ cmd/cmd
 vendor
 docs
 *.exe
+config.yaml

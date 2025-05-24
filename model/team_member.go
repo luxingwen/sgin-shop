@@ -12,6 +12,6 @@ type TeamMember struct {
 	// 用户当前选择这个团队
 	IsCurrentTeam bool `gorm:"default:false" json:"is_current_team"`
 
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了团队成员加入的时间
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了团队成员信息最后更新的时间
+	CreatedAt time.Time `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了团队成员加入的时间
+	UpdatedAt time.Time `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了团队成员信息最后更新的时间
 }

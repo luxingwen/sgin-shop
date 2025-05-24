@@ -29,7 +29,7 @@ type UserAddress struct {
 	// 地址类型
 	AddressType string `json:"address_type" gorm:"type:varchar(100)"` // 公司、家庭、学校 等
 	// 是否默认地址
-	IsDefault bool   `json:"is_default" gorm:"default:false"`  // 是否默认地址
-	CreatedAt string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	IsDefault bool   `json:"is_default" gorm:"default:false"`                // 是否默认地址
+	CreatedAt string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 }

@@ -18,7 +18,7 @@ type ProductCategory struct {
 
 	Sort int `json:"sort" gorm:"default:0"` // 排序
 	// 状态 1:启用 2:禁用
-	Status    int    `json:"status" gorm:"default:1"`          // 状态 1:启用 2:禁用
-	CreatedAt string `gorm:"autoCreateTime" json:"created_at"` // CreatedAt 记录了创建的时间
-	UpdatedAt string `gorm:"autoUpdateTime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
+	Status    int    `json:"status" gorm:"default:1"`                        // 状态 1:启用 2:禁用
+	CreatedAt string `gorm:"autoCreateTime;type:datetime" json:"created_at"` // CreatedAt 记录了创建的时间
+	UpdatedAt string `gorm:"autoUpdateTime;type:datetime" json:"updated_at"` // UpdatedAt 记录了最后更新的时间
 }
