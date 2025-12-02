@@ -3,9 +3,11 @@ package utils
 import (
 	"crypto/hmac"
 	"crypto/md5"
+	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -13,17 +15,25 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"sgin/pkg/config"
+
+	jwt "github.com/golang-jwt/jwt/v4"
 )
 
-const (
-	secretKey = "your-secret-key"
-)
+// 从配置加载 JWT 秘钥，若未配置则回退到 PasswdKey
+func jwtSecret() []byte {
+	cfg := config.GetConfig()
+	if cfg != nil && cfg.PasswdKey != "" {
+		return []byte(cfg.PasswdKey)
+	}
+	// 最小化改动：保持兼容旧行为
+	return []byte("your-secret-key")
+}
 
 // GenerateToken 生成 JWT token
 func GenerateToken(userID string) (string, error) {
 	// 定义 JWT 的有效期限
-	expirationTime := time.Now().Add(7 * 24 * time.Hour) // 设置为 24 小时有效期，可根据需求调整
+	expirationTime := time.Now().Add(24 * time.Hour)
 
 	// 创建 token 的声明部分
 	claims := jwt.MapClaims{
@@ -34,32 +44,28 @@ func GenerateToken(userID string) (string, error) {
 	// 使用 HS256 算法进行签名
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	// 使用密钥对 token 进行签名，生成字符串格式的 token
-	tokenString, err := token.SignedString([]byte(secretKey)) // 使用与验证时相同的密钥
+	tokenString, err := token.SignedString(jwtSecret())
 	if err != nil {
 		return "", err
 	}
-
 	return tokenString, nil
 }
 
 // ParseToken 解析 JWT token
 func ParseToken(tokenString string) (jwt.MapClaims, error) {
-	// 解析 token
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(secretKey), nil // 使用与生成 token 时相同的密钥
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return jwtSecret(), nil
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	// 获取 token 中的声明部分
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, err
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		return claims, nil
 	}
-
-	return claims, nil
+	return nil, errors.New("invalid token")
 }
 
 // 解析token返回user_id
@@ -68,20 +74,30 @@ func ParseTokenGetUserID(tokenString string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	userID, ok := claims["user_id"].(string)
 	if !ok {
-		return "", err
+		return "", errors.New("user_id not found in token")
 	}
-
 	return userID, nil
 }
 
 // 生成验证码
 func GenerateVerificationCode() string {
-	rand.Seed(time.Now().UnixNano())
-	code := rand.Intn(999999)
-	return strconv.Itoa(code)
+	const n = 6
+	max := 1000000
+	var num int
+	var buf [4]byte
+	if _, err := crand.Read(buf[:]); err == nil {
+		num = int((uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3])) % uint32(max))
+	} else {
+		rand.Seed(time.Now().UnixNano())
+		num = rand.Intn(max)
+	}
+	s := strconv.Itoa(num)
+	for len(s) < n {
+		s = "0" + s
+	}
+	return s
 }
 
 // SignBody 签名
@@ -129,19 +145,12 @@ func GetFileMd5(fileinfo multipart.File) (string, error) {
 
 // GenerateOrderID generates a unique order ID based on the current date and time including nanoseconds.
 func GenerateOrderID() string {
-	// Set the seed for random number generation
 	rand.Seed(time.Now().UnixNano())
-
-	// Get the current date and time including nanoseconds
 	now := time.Now()
-	dateStr := now.Format("20060102150405") // Format as YYYYMMDDHHMMSS
+	dateStr := now.Format("20060102150405")
 	nanoStr := fmt.Sprintf("%09d", now.Nanosecond())
-
-	// Generate a random 4-digit number
 	randomNum := rand.Intn(10000)
 	randomStr := fmt.Sprintf("%04d", randomNum)
-
-	// Combine the date, time, nanoseconds, and random number to form the order ID
 	orderID := dateStr + nanoStr + randomStr
 	return orderID
 }

@@ -5,12 +5,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sgin/controller"
 	"sgin/model"
 	"sgin/pkg/app"
 	"sgin/pkg/config"
 	"sgin/routers"
+	"sgin/service"
 	"syscall"
 	"time"
+
+	redis "github.com/go-redis/redis/v8"
 )
 
 // @title           Swagger Example API
@@ -35,23 +39,68 @@ import (
 func main() {
 	config.InitConfig()
 	serverApp := app.NewApp()
+	// 退出时同步日志
+	defer func() { _ = serverApp.Logger.Sync() }()
+	// 启动自检（非阻断式提示）
+	serverApp.RunSelfCheck()
 	model.MigrateDbTable(serverApp.DB)
 	serverApp.Use(app.RecoveryWithWriter(serverApp.Logger))
+	serverApp.Use(app.SecurityHeaders())
 	serverApp.Use(app.Cors())
+	if serverApp.Config.LogConfig.Level == "debug" {
+		serverApp.Use(app.RequestLogger())
+		serverApp.Use(app.ResponseLogger())
+	}
 
 	routers.InitRouter(serverApp)
 
 	serverApp.GET("/ping", func(ctx *app.Context) {
-		panic("test panic")
 		ctx.JSONSuccess("pong")
 	})
-	serverApp.Router.Static("/public", serverApp.Config.Upload.Dir)
+	serverApp.GET("/healthz", func(ctx *app.Context) {
+		ctx.JSONSuccess("ok")
+	})
+	serverApp.GET("/readyz", func(ctx *app.Context) {
+		if serverApp.DB != nil {
+			sqlDB, err := serverApp.DB.DB()
+			if err != nil {
+				ctx.JSONError(http.StatusServiceUnavailable, "db not ready")
+				return
+			}
+			if err := sqlDB.PingContext(ctx.Ctx); err != nil {
+				ctx.JSONError(http.StatusServiceUnavailable, "db not ready")
+				return
+			}
+		}
+		if serverApp.Redis != nil {
+			if _, err := serverApp.Redis.Get(ctx.Ctx, "__readyz"); err != nil && err != redis.Nil {
+				ctx.JSONError(http.StatusServiceUnavailable, "redis not ready")
+				return
+			}
+		}
+		ctx.JSONSuccess("ready")
+	})
+
+	// 确保上传目录存在
+	if serverApp.Config.Upload.Dir != "" {
+		_ = os.MkdirAll(serverApp.Config.Upload.Dir, 0755)
+		serverApp.Router.Static("/public", serverApp.Config.Upload.Dir)
+	}
 
 	serverApp.NoRoute(app.NoRouterHandler())
 
+	v1 := serverApp.Group("/api/v1")
+	userController := &controller.UserController{Service: &service.UserService{}}
+	{
+		v1.POST("/users", userController.CreateUser)
+	}
+
 	srv := &http.Server{
-		Addr:    ":" + serverApp.Config.ServerPort,
-		Handler: serverApp.Router,
+		Addr:         ":" + serverApp.Config.ServerPort,
+		Handler:      serverApp.Router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	go func() {

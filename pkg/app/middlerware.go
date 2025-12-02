@@ -136,3 +136,34 @@ func TestAbort() HandlerFunc {
 		c.AbortWithStatusJSON(http.StatusOK, "test abort")
 	}
 }
+
+// 设置常见安全响应头
+func SecurityHeaders() HandlerFunc {
+	return func(c *Context) {
+		h := c.Writer.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-XSS-Protection", "1; mode=block")
+		h.Set("Referrer-Policy", "no-referrer")
+		// 在非 debug 模式下设置基础 CSP，防止 XSS（可按需放宽/配置化）
+		if c.Config == nil || c.Config.LogConfig.Level != "debug" {
+			h.Set("Content-Security-Policy", "default-src 'self'")
+		}
+		c.Next()
+	}
+}
+
+func joinCSV(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	for i, s := range items {
+		if i > 0 {
+			buf.WriteByte(',')
+			buf.WriteByte(' ')
+		}
+		buf.WriteString(s)
+	}
+	return buf.String()
+}

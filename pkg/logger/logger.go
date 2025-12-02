@@ -3,6 +3,7 @@ package logger
 import (
 	"os"
 	"sgin/pkg/config"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -17,8 +18,32 @@ func (l *Logger) With(args ...interface{}) *Logger {
 	return &Logger{l.SugaredLogger.With(args...)}
 }
 
+// WithOptions wraps zap.WithOptions and preserves *Logger type
+func (l *Logger) WithOptions(opts ...zap.Option) *Logger {
+	if l == nil || l.SugaredLogger == nil {
+		return l
+	}
+	base := l.SugaredLogger.Desugar().WithOptions(opts...)
+	return &Logger{base.Sugar()}
+}
+
+// Named returns a new named logger
+func (l *Logger) Named(name string) *Logger {
+	if l == nil || l.SugaredLogger == nil {
+		return l
+	}
+	return &Logger{l.SugaredLogger.Named(name)}
+}
+
+// Desugar exposes the underlying zap.Logger
+func (l *Logger) Desugar() *zap.Logger {
+	if l == nil || l.SugaredLogger == nil {
+		return zap.NewNop()
+	}
+	return l.SugaredLogger.Desugar()
+}
+
 func NewLogger(config config.LogConfig) *Logger {
-	writeSyncer := getLogWriter(config)
 	encoder := getEncoder(config.Format)
 
 	var logLevel zapcore.Level
@@ -27,19 +52,49 @@ func NewLogger(config config.LogConfig) *Logger {
 		logLevel = zap.InfoLevel
 	}
 
-	core := zapcore.NewCore(encoder, writeSyncer, logLevel)
+	cores := []zapcore.Core{}
 
-	if config.ShowConsole {
-		// 创建控制台输出
-		consoleDebugging := zapcore.Lock(os.Stdout)
-		consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
-		consoleCore := zapcore.NewCore(consoleEncoder, consoleDebugging, logLevel)
-
-		// 合并多个核心
-		core = zapcore.NewTee(core, consoleCore)
+	// 文件输出（当配置了文件名时）
+	if config.Filename != "" {
+		fileWS := getLogWriter(config)
+		cores = append(cores, zapcore.NewCore(encoder, fileWS, logLevel))
 	}
 
-	logger := zap.New(core, zap.AddCaller())
+	// 控制台输出（可与文件并存）
+	if config.ShowConsole || config.Filename == "" {
+		consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+		consoleWS := zapcore.Lock(os.Stdout)
+		cores = append(cores, zapcore.NewCore(consoleEncoder, consoleWS, logLevel))
+	}
+
+	var core zapcore.Core
+	if len(cores) == 1 {
+		core = cores[0]
+	} else {
+		core = zapcore.NewTee(cores...)
+	}
+
+	// 可选日志采样
+	if config.EnableSampling {
+		initial := config.SamplingInitial
+		thereafter := config.SamplingThereafter
+		if initial <= 0 {
+			initial = 100
+		}
+		if thereafter <= 0 {
+			thereafter = 100
+		}
+		core = zapcore.NewSamplerWithOptions(core, time.Second, initial, thereafter)
+	}
+
+	// 选择堆栈等级
+	var opts []zap.Option
+	opts = append(opts, zap.AddCaller())
+	if stLevel, err := parseLevel(config.StacktraceLevel); err == nil {
+		opts = append(opts, zap.AddStacktrace(stLevel))
+	}
+
+	logger := zap.New(core, opts...)
 
 	return &Logger{logger.Sugar()}
 }
@@ -81,4 +136,21 @@ func (l *Logger) Printf(format string, args ...interface{}) {
 func (l *Logger) Write(p []byte) (n int, err error) {
 	l.Info(string(p))
 	return len(p), nil
+}
+
+func parseLevel(s string) (zapcore.Level, error) {
+	if s == "" {
+		return zapcore.ErrorLevel, nil
+	}
+	var lv zapcore.Level
+	err := lv.Set(s)
+	return lv, err
+}
+
+// Sync 将缓冲区刷新到下层写入器
+func (l *Logger) Sync() error {
+	if l == nil || l.SugaredLogger == nil {
+		return nil
+	}
+	return l.SugaredLogger.Sync()
 }
