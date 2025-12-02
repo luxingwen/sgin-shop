@@ -36,6 +36,8 @@ func InitRouter(ctx *app.App) {
 	InitPaymentRouter(ctx)
 	InitCartRouter(ctx)
 	InitOrderRouter(ctx)
+	InitReturnRouter(ctx)
+	InitPaymentReconcileRouter(ctx)
 	InitProductFrontRouter(ctx)
 	InitPaymentMethodRouter(ctx)
 	InitPaypalRouter(ctx)
@@ -627,5 +629,37 @@ func InitPaymentRouter(ctx *app.App) {
 		v1.POST("/payments/update", paymentController.UpdatePayment)
 		v1.POST("/payments/delete", paymentController.DeletePayment)
 		v1.POST("/payments/list", paymentController.GetPaymentList)
+	}
+}
+
+// InitReturnRouter 初始化退货/售后相关路由
+func InitReturnRouter(ctx *app.App) {
+	v1 := ctx.Group(ctx.Config.ApiPrefix + "/v1")
+	v1.Use(middleware.LoginCheck())
+	v1.Use(middleware.SysOpLogMiddleware(&service.SysOpLogService{}))
+	{
+		returnController := &controller.ReturnController{ReturnService: service.NewReturnService()}
+
+		v1.POST("/return/request", returnController.CreateReturnRequest)
+		v1.GET("/return/mylist", returnController.GetMyReturns)
+		v1.POST("/return/info", returnController.GetReturnInfo)
+
+		// admin routes under /return/... require login and will be audited by sys op log
+		v1.POST("/admin/return/approve", returnController.AdminApproveReturn)
+		v1.POST("/admin/return/reject", returnController.AdminRejectReturn)
+	}
+}
+
+func InitPaymentReconcileRouter(ctx *app.App) {
+	v1 := ctx.Group(ctx.Config.ApiPrefix + "/v1")
+	v1.Use(middleware.LoginCheck())
+	v1.Use(middleware.SysOpLogMiddleware(&service.SysOpLogService{}))
+	{
+		pc := &controller.PaymentReconcileController{Reconciler: service.NewPaymentReconciler()}
+		// 管理端对账 API
+		v1.POST("/admin/payments/reconcile/run", pc.RunReconcile)
+		v1.GET("/admin/payments/reconcile/unmatched", pc.ListUnmatched)
+		v1.GET("/admin/payments/reconcile/export", pc.ExportUnmatched)
+		v1.POST("/admin/payments/reconcile/mark", pc.ManualMark)
 	}
 }

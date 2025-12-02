@@ -6,6 +6,7 @@ import (
 	"sgin/pkg/app"
 	paymentmethod "sgin/pkg/payment-method"
 	"sgin/service"
+	"strconv"
 
 	"github.com/go-pay/gopay/alipay"
 )
@@ -116,6 +117,32 @@ func (a *AlipayController) Notify(ctx *app.Context) {
 	}
 
 	ctx.Logger.Info("VerifySignWithCert success")
+
+	// 尝试提取关键字段并调用支付服务处理通知（幂等）
+	var m map[string]string
+	rb, _ := json.Marshal(notifyReq)
+	_ = json.Unmarshal(rb, &m)
+
+	outTradeNo := m["out_trade_no"]
+	tradeNo := m["trade_no"]
+	totalAmount := m["total_amount"]
+	tradeStatus := m["trade_status"]
+
+	// 尝试解析金额
+	var amount float64
+	if totalAmount != "" {
+		if a2, perr := strconv.ParseFloat(totalAmount, 64); perr == nil {
+			amount = a2
+		}
+	}
+
+	// 处理通知
+	psvc := service.NewPaymentService()
+	if err := psvc.HandleNotification(ctx, "alipay", outTradeNo, tradeNo, amount, tradeStatus, string(rb)); err != nil {
+		ctx.Logger.Error("Failed to handle alipay notification", err)
+		ctx.JSONError(http.StatusInternalServerError, "failed to process notification")
+		return
+	}
 
 	// 如果需要，可将 BodyMap 内数据，Unmarshal 到指定结构体指针 ptr
 	//err = notifyReq.Unmarshal(ptr)

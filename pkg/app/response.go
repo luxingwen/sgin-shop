@@ -164,7 +164,6 @@ func (ctx *Context) JSONErrLog(err error, msg string, keysAndValues ...interface
 	ctx.Logger.Errorw(msg, append(fields, "error", err.Error())...)
 	ctx.JSONError(http.StatusInternalServerError, "Internal Server Error")
 }
- 
 
 // Response data with list object
 func (ctx *Context) ResList(v interface{}) {

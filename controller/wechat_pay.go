@@ -60,6 +60,33 @@ func (w *WechatPayController) Return(ctx *app.Context) {
 		return
 	}
 
+	// 解析 notifyReq 到 map 并调用支付通知处理
+	var m map[string]interface{}
+	_ = json.Unmarshal(reqbody, &m)
+
+	// 尝试提取商户订单号和微信交易号
+	outTradeNo := ""
+	tradeNo := ""
+	amount := 0.0
+	if v, ok := m["out_trade_no"].(string); ok {
+		outTradeNo = v
+	}
+	if v, ok := m["transaction_id"].(string); ok {
+		tradeNo = v
+	}
+	if v, ok := m["amount"].(map[string]interface{}); ok {
+		if a, ok2 := v["total"].(float64); ok2 {
+			amount = a / 100.0
+		}
+	}
+
+	psvc := service.NewPaymentService()
+	if err := psvc.HandleNotification(ctx, "wechat", outTradeNo, tradeNo, amount, "", string(reqbody)); err != nil {
+		ctx.Logger.Error("Failed to handle wechat notification", err)
+		ctx.JSONError(http.StatusInternalServerError, "failed to process notification")
+		return
+	}
+
 	// ====↓↓↓====异步通知应答====↓↓↓====
 	// 退款通知http应答码为200且返回状态码为SUCCESS才会当做商户接收成功，否则会重试。
 	// 注意：重试过多会导致微信支付端积压过多通知而堵塞，影响其他正常通知。

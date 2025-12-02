@@ -37,6 +37,10 @@ func MigrateDbTable(db *gorm.DB) {
 		&ProductItem{},
 		&Resource{},
 		&Payment{},
+        &Shipment{},
+		&Refund{},
+		&Return{},
+		&ReturnItem{},
 		&Cart{},
 		&Order{},
 		&OrderItem{},
@@ -62,7 +66,8 @@ func MigrateDbTable(db *gorm.DB) {
 		}
 		err = db.Create(&user).Error
 		if err != nil {
-			log.Fatal("Failed to create default user", err)
+			// don't exit the process when default user creation fails; log and continue
+			log.Printf("Failed to create default user: %v", err)
 		}
 	}
 

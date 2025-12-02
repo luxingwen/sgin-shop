@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type OrderService struct {
@@ -22,20 +23,22 @@ func NewOrderService() *OrderService {
 func (s *OrderService) CreateOrder(ctx *app.Context, req *model.ReqOrderCreate) (*model.Order, error) {
 	// Create the order
 	order := &model.Order{
-		OrderNo:          uuid.New().String(),
-		UserID:           req.UserId,
-		Status:           model.OrderStatusPending,
-		ReceiverName:     req.Receiver.ReceiverName,
-		ReceiverPhone:    req.Receiver.ReceiverPhone,
-		ReceiverEmail:    req.Receiver.ReceiverEmail,
-		ReceiverCountry:  req.Receiver.ReceiverCountry,
-		ReceiverProvince: req.Receiver.ReceiverProvince,
-		ReceiverCity:     req.Receiver.ReceiverCity,
-		ReceiverAddress:  req.Receiver.ReceiverAddress,
-		ReceiverZip:      req.Receiver.ReceiverZip,
-		ReceiverRemark:   req.Receiver.ReceiverRemark,
-		CreatedAt:        time.Now().Format(time.DateTime),
-		UpdatedAt:        time.Now().Format(time.DateTime),
+		OrderNo:              uuid.New().String(),
+		UserID:               req.UserId,
+		Status:               model.OrderStatusReserved,
+		ReceiverName:         req.Receiver.ReceiverName,
+		ReceiverPhone:        req.Receiver.ReceiverPhone,
+		ReceiverEmail:        req.Receiver.ReceiverEmail,
+		ReceiverCountry:      req.Receiver.ReceiverCountry,
+		ReceiverProvince:     req.Receiver.ReceiverProvince,
+		ReceiverCity:         req.Receiver.ReceiverCity,
+		ReceiverAddress:      req.Receiver.ReceiverAddress,
+		ReceiverZip:          req.Receiver.ReceiverZip,
+		ReceiverRemark:       req.Receiver.ReceiverRemark,
+		CreatedAt:            time.Now().Format(time.DateTime),
+		UpdatedAt:            time.Now().Format(time.DateTime),
+		ReservedAt:           time.Now().Format(time.DateTime),
+		ReservationExpiresAt: time.Now().Add(30 * time.Minute).Format(time.DateTime),
 	}
 
 	productItemUuids := make([]string, 0)
@@ -43,20 +46,48 @@ func (s *OrderService) CreateOrder(ctx *app.Context, req *model.ReqOrderCreate) 
 		productItemUuids = append(productItemUuids, item.ProductItemID)
 	}
 
-	productItemMap, err := NewProductService().GetProductItemByUUIDList(ctx, productItemUuids)
-	if err != nil {
-		return nil, err
-	}
-
-	err = ctx.DB.Transaction(func(tx *gorm.DB) error {
+	err := ctx.DB.Transaction(func(tx *gorm.DB) error {
 
 		orderItems := make([]*model.OrderItem, 0)
 
-		// Create the order items
+		// lock product items for update to avoid oversell
+		uuids := make([]string, 0, len(req.Items))
+		for _, it := range req.Items {
+			uuids = append(uuids, it.ProductItemID)
+		}
+
+		lockedItems := make([]*model.ProductItem, 0)
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("uuid in (?)", uuids).Find(&lockedItems).Error; err != nil {
+			ctx.Logger.Error("Failed to lock product items", err)
+			return errors.New("failed to lock product items")
+		}
+
+		lockedMap := make(map[string]*model.ProductItem)
+		for _, pi := range lockedItems {
+			lockedMap[pi.Uuid] = pi
+		}
+
+		// Prepare order items and deduct stock
 		for _, item := range req.Items {
-			productItem, ok := productItemMap[item.ProductItemID]
+			productItem, ok := lockedMap[item.ProductItemID]
 			if !ok {
 				return errors.New("product item not found")
+			}
+
+			if productItem.Stock < int64(item.Quantity) {
+				return errors.New("insufficient stock for product item: " + item.ProductItemID)
+			}
+
+			// decrement stock atomically
+			res := tx.Model(&model.ProductItem{}).
+				Where("uuid = ? AND stock >= ?", item.ProductItemID, int64(item.Quantity)).
+				UpdateColumn("stock", gorm.Expr("stock - ?", int64(item.Quantity)))
+			if res.Error != nil {
+				ctx.Logger.Error("Failed to decrement stock", res.Error)
+				return errors.New("failed to decrement stock")
+			}
+			if res.RowsAffected == 0 {
+				return errors.New("insufficient stock for product item: " + item.ProductItemID)
 			}
 
 			orderItem := &model.OrderItem{
@@ -65,21 +96,18 @@ func (s *OrderService) CreateOrder(ctx *app.Context, req *model.ReqOrderCreate) 
 				Quantity:      item.Quantity,
 				Price:         productItem.Price,
 				TotalAmount:   productItem.Price * float64(item.Quantity),
-				// Additional calculations for price, discount, etc., can be added here
-				CreatedAt: time.Now().Format(time.DateTime),
-				UpdatedAt: time.Now().Format(time.DateTime),
+				CreatedAt:     time.Now().Format(time.DateTime),
+				UpdatedAt:     time.Now().Format(time.DateTime),
 			}
 
 			order.TotalAmount += orderItem.TotalAmount
 			orderItems = append(orderItems, orderItem)
-
 		}
 
 		// Create the order in the database
 		err := tx.Create(order).Error
 		if err != nil {
 			ctx.Logger.Error("Failed to create order", err)
-			tx.Rollback()
 			return errors.New("failed to create order")
 		}
 
@@ -87,7 +115,6 @@ func (s *OrderService) CreateOrder(ctx *app.Context, req *model.ReqOrderCreate) 
 		err = tx.Create(orderItems).Error
 		if err != nil {
 			ctx.Logger.Error("Failed to create order items", err)
-			tx.Rollback()
 			return errors.New("failed to create order items")
 		}
 
@@ -106,20 +133,22 @@ func (s *OrderService) CreateOrder(ctx *app.Context, req *model.ReqOrderCreate) 
 func (s *OrderService) CreateOrderByCart(ctx *app.Context, req *model.ReqOrderCreate) (*model.Order, error) {
 	// Create the order
 	order := &model.Order{
-		OrderNo:          uuid.New().String(),
-		UserID:           req.UserId,
-		Status:           model.OrderStatusPending,
-		ReceiverName:     req.Receiver.ReceiverName,
-		ReceiverPhone:    req.Receiver.ReceiverPhone,
-		ReceiverEmail:    req.Receiver.ReceiverEmail,
-		ReceiverCountry:  req.Receiver.ReceiverCountry,
-		ReceiverProvince: req.Receiver.ReceiverProvince,
-		ReceiverCity:     req.Receiver.ReceiverCity,
-		ReceiverAddress:  req.Receiver.ReceiverAddress,
-		ReceiverZip:      req.Receiver.ReceiverZip,
-		ReceiverRemark:   req.Receiver.ReceiverRemark,
-		CreatedAt:        time.Now().Format(time.DateTime),
-		UpdatedAt:        time.Now().Format(time.DateTime),
+		OrderNo:              uuid.New().String(),
+		UserID:               req.UserId,
+		Status:               model.OrderStatusReserved,
+		ReceiverName:         req.Receiver.ReceiverName,
+		ReceiverPhone:        req.Receiver.ReceiverPhone,
+		ReceiverEmail:        req.Receiver.ReceiverEmail,
+		ReceiverCountry:      req.Receiver.ReceiverCountry,
+		ReceiverProvince:     req.Receiver.ReceiverProvince,
+		ReceiverCity:         req.Receiver.ReceiverCity,
+		ReceiverAddress:      req.Receiver.ReceiverAddress,
+		ReceiverZip:          req.Receiver.ReceiverZip,
+		ReceiverRemark:       req.Receiver.ReceiverRemark,
+		CreatedAt:            time.Now().Format(time.DateTime),
+		UpdatedAt:            time.Now().Format(time.DateTime),
+		ReservedAt:           time.Now().Format(time.DateTime),
+		ReservationExpiresAt: time.Now().Add(30 * time.Minute).Format(time.DateTime),
 	}
 
 	// 获取购物车商品
@@ -133,8 +162,49 @@ func (s *OrderService) CreateOrderByCart(ctx *app.Context, req *model.ReqOrderCr
 
 		orderItems := make([]*model.OrderItem, 0)
 
+		// lock product items referenced by cart
+		uuids := make([]string, 0, len(req.CartUuids))
 		for _, cartUuid := range req.CartUuids {
 			if cartItem, ok := cartProductMap[cartUuid]; ok {
+				uuids = append(uuids, cartItem.ProductItemUuid)
+			}
+		}
+
+		lockedItems := make([]*model.ProductItem, 0)
+		if len(uuids) > 0 {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("uuid in (?)", uuids).Find(&lockedItems).Error; err != nil {
+				ctx.Logger.Error("Failed to lock product items", err)
+				return errors.New("failed to lock product items")
+			}
+		}
+
+		lockedMap := make(map[string]*model.ProductItem)
+		for _, pi := range lockedItems {
+			lockedMap[pi.Uuid] = pi
+		}
+
+		for _, cartUuid := range req.CartUuids {
+			if cartItem, ok := cartProductMap[cartUuid]; ok {
+				productItem, ok := lockedMap[cartItem.ProductItemUuid]
+				if !ok {
+					return errors.New("product item not found")
+				}
+
+				if productItem.Stock < int64(cartItem.Quantity) {
+					return errors.New("insufficient stock for product item: " + cartItem.ProductItemUuid)
+				}
+
+				// decrement stock atomically
+				res := tx.Model(&model.ProductItem{}).
+					Where("uuid = ? AND stock >= ?", cartItem.ProductItemUuid, int64(cartItem.Quantity)).
+					UpdateColumn("stock", gorm.Expr("stock - ?", int64(cartItem.Quantity)))
+				if res.Error != nil {
+					ctx.Logger.Error("Failed to decrement stock", res.Error)
+					return errors.New("failed to decrement stock")
+				}
+				if res.RowsAffected == 0 {
+					return errors.New("insufficient stock for product item: " + cartItem.ProductItemUuid)
+				}
 
 				orderItem := &model.OrderItem{
 					OrderID:       order.OrderNo,
@@ -142,9 +212,8 @@ func (s *OrderService) CreateOrderByCart(ctx *app.Context, req *model.ReqOrderCr
 					Quantity:      cartItem.Quantity,
 					Price:         cartItem.ProductItem.Price,
 					TotalAmount:   cartItem.ProductItem.Price * float64(cartItem.Quantity),
-					// Additional calculations for price, discount, etc., can be added here
-					CreatedAt: time.Now().Format(time.DateTime),
-					UpdatedAt: time.Now().Format(time.DateTime),
+					CreatedAt:     time.Now().Format(time.DateTime),
+					UpdatedAt:     time.Now().Format(time.DateTime),
 				}
 
 				order.TotalAmount += orderItem.TotalAmount
@@ -156,7 +225,6 @@ func (s *OrderService) CreateOrderByCart(ctx *app.Context, req *model.ReqOrderCr
 		err := tx.Create(order).Error
 		if err != nil {
 			ctx.Logger.Error("Failed to create order", err)
-			tx.Rollback()
 			return errors.New("failed to create order")
 		}
 
@@ -164,7 +232,6 @@ func (s *OrderService) CreateOrderByCart(ctx *app.Context, req *model.ReqOrderCr
 		err = tx.Create(orderItems).Error
 		if err != nil {
 			ctx.Logger.Error("Failed to create order items", err)
-			tx.Rollback()
 			return errors.New("failed to create order items")
 		}
 
@@ -172,7 +239,6 @@ func (s *OrderService) CreateOrderByCart(ctx *app.Context, req *model.ReqOrderCr
 		err = tx.Where("uuid in (?)", req.CartUuids).Delete(&model.Cart{}).Error
 		if err != nil {
 			ctx.Logger.Error("Failed to delete cart", err)
-			tx.Rollback()
 			return errors.New("failed to delete cart")
 		}
 

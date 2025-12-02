@@ -1,8 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"sgin/pkg/config"
-	"sgin/pkg/db"
+	pkgdb "sgin/pkg/db"
 	"sgin/pkg/logger"
 	"sgin/pkg/redisop"
 
@@ -24,17 +25,21 @@ type AppRouterGroup struct {
 	App *App
 }
 
-func NewApp() *App {
+func NewApp() (*App, error) {
 	app := &App{}
 	app.Config = config.GetConfig()
-	if app.Config.MySQL.Host != "" {
-		app.DB = db.GetDB(app.Config.MySQL)
-	}
 
 	app.Logger = logger.NewLogger(app.Config.LogConfig)
 
-	if app.Config.MySQL.ShowSQL && app.DB != nil {
+	if app.Config.MySQL.Host != "" {
+		dbConn, err := pkgdb.GetDB(app.Config.MySQL)
+		if err != nil {
+			return app, fmt.Errorf("failed to init db: %w", err)
+		}
+		app.DB = dbConn
+	}
 
+	if app.Config.MySQL.ShowSQL && app.DB != nil {
 		gormLogger := glogger.New(
 			app.Logger,
 			glogger.Config{
@@ -53,7 +58,7 @@ func NewApp() *App {
 
 	app.Router = gin.Default()
 
-	return app
+	return app, nil
 }
 
 func (app *App) Group(relativePath string, handlers ...gin.HandlerFunc) *AppRouterGroup {

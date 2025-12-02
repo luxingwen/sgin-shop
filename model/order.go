@@ -3,10 +3,14 @@ package model
 const (
 	// 订单状态
 	OrderStatusPending   = "pending"   // 待支付
+	OrderStatusReserved  = "reserved"  // 已预占库存，等待支付
 	OrderStatusPaid      = "paid"      // 已支付
 	OrderStatusDelivered = "delivered" // 已发货
+	OrderStatusShipped   = "shipped"   // 已发运
 	OrderStatusCompleted = "completed" // 已完成
 	OrderStatusClosed    = "closed"    // 已关闭
+	OrderStatusRefunded   = "refunded"  // 已退款
+	OrderStatusReturnRequested = "return_requested" // 申请退货
 )
 
 // 订单
@@ -45,6 +49,10 @@ type Order struct {
 
 	// 支付时间
 	PaidAt string `json:"paid_at"`
+	// 预占时间
+	ReservedAt string `json:"reserved_at"`
+	// 预占过期时间
+	ReservationExpiresAt string `json:"reservation_expires_at"`
 	// 发货时间
 	DeliveredAt string `json:"delivered_at"`
 	// 完成时间

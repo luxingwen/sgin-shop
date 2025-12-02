@@ -2,7 +2,6 @@ package db
 
 import (
 	"fmt"
-	"log"
 	"sgin/pkg/config"
 	"time"
 
@@ -10,16 +9,16 @@ import (
 	"gorm.io/gorm"
 )
 
-func GetDB(cfg config.MySQLConfig) *gorm.DB {
+func GetDB(cfg config.MySQLConfig) (*gorm.DB, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 	// avoid leaking real password in logs
 	safeDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.Username, "*****", cfg.Host, cfg.Port, cfg.Database)
-	log.Println("dsn:", safeDSN)
+	_ = safeDSN // avoid unused in case caller doesn't want log here
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("failed to connect to mysql: %v", err)
+		return nil, err
 	}
 	// 配置数据库连接池，提升稳定性
 	if sqlDB, err := db.DB(); err == nil {
@@ -27,5 +26,5 @@ func GetDB(cfg config.MySQLConfig) *gorm.DB {
 		sqlDB.SetMaxOpenConns(100)
 		sqlDB.SetConnMaxLifetime(1 * time.Hour)
 	}
-	return db
+	return db, nil
 }

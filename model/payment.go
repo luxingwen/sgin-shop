@@ -5,6 +5,8 @@ const (
 	PaymentStatusPaid    = "paid"    // 已支付
 	// 取消支付
 	PaymentStatusCanceled = "canceled"
+	// 已退款
+	PaymentStatusRefunded = "refunded"
 )
 
 // 付款信息
@@ -28,7 +30,7 @@ type Payment struct {
 	// 付款渠道订单号
 	ChannelOrderNo string `json:"channel_order_no"`
 	// 付款渠道交易号
-	ChannelTransactionNo string `json:"channel_transaction_no"`
+	ChannelTransactionNo string `json:"channel_transaction_no" gorm:"uniqueIndex"`
 
 	ChannelStatus string `json:"channel_status"` // 付款渠道状态
 

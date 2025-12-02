@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -102,12 +103,12 @@ var (
 	config *Config
 )
 
-func InitConfig() {
+func InitConfig() error {
 	bindEnvs()
-	loadConfigFile()
+	return loadConfigFile()
 }
 
-func loadConfigFile() {
+func loadConfigFile() error {
 	v := viper.New()
 
 	configFile := os.Getenv("CONFIG_FILE")
@@ -118,14 +119,14 @@ func loadConfigFile() {
 	v.SetConfigFile(configFile)
 
 	if err := v.ReadInConfig(); err != nil {
-		log.Fatalf("failed to read config file: %v", err)
+		return err
 	}
 
 	config = &Config{}
 
 	err := v.Unmarshal(&config)
 	if err != nil {
-		log.Fatalf("failed to parse config file: %v", err)
+		return err
 	}
 
 	// 兼容从环境变量注入的逗号分隔形式的 AllowedOrigins（旧字段）
@@ -150,8 +151,10 @@ func loadConfigFile() {
 
 	// 启动时做最小化配置校验与提示
 	if err := config.Validate(); err != nil {
-		log.Fatalf("invalid configuration: %v", err)
+		return err
 	}
+
+	return nil
 }
 
 func bindEnvs() {
@@ -206,7 +209,18 @@ func (c *Config) Validate() error {
 		c.ServerPort = "8080"
 	}
 	if c.PasswdKey == "" {
-		// 警告：未配置 PasswdKey，将回退到代码中的默认值，不建议在生产环境使用
+		// 如果运行在生产/发布环境，强制要求 PasswdKey
+		env := os.Getenv("GIN_MODE")
+		if env == "" {
+			env = os.Getenv("ENV")
+		}
+		if env == "" {
+			env = os.Getenv("GO_ENV")
+		}
+		if env == "production" || env == "prod" || env == "release" {
+			return fmt.Errorf("missing PasswdKey in production environment; please set PASSWD_KEY")
+		}
+		// 非生产环境下仍然警告
 		log.Printf("warning: PasswdKey is empty, fallback key will be used. Please set PASSWD_KEY in production.")
 	}
 	if c.AppRateLimit.R <= 0 {

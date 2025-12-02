@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -37,8 +38,17 @@ import (
 // @externalDocs.description  OpenAPI
 // @externalDocs.url          https://swagger.io/resources/open-api/
 func main() {
-	config.InitConfig()
-	serverApp := app.NewApp()
+	if err := config.InitConfig(); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		// 建议：将错误写入标准错误日志或集中式日志系统
+		os.Exit(1)
+	}
+
+	serverApp, err := app.NewApp()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize app: %v\n", err)
+		os.Exit(1)
+	}
 	// 退出时同步日志
 	defer func() { _ = serverApp.Logger.Sync() }()
 	// 启动自检（非阻断式提示）
@@ -86,6 +96,16 @@ func main() {
 		_ = os.MkdirAll(serverApp.Config.Upload.Dir, 0755)
 		serverApp.Router.Static("/public", serverApp.Config.Upload.Dir)
 	}
+
+	// 启动库存预占释放后台任务（每分钟检查）
+	// 构造一个轻量的 app.Context 以供后台任务使用（无 gin.Context）
+	reservationCtx := &app.Context{
+		DB:     serverApp.DB,
+		Logger: serverApp.Logger,
+		Config: serverApp.Config,
+		Ctx:    context.Background(),
+	}
+	service.NewReservationService().StartReservationReleaser(reservationCtx, 1*time.Minute)
 
 	serverApp.NoRoute(app.NoRouterHandler())
 
